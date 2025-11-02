@@ -1,0 +1,5 @@
+numpy==2.3.4
+pandas==2.3.3
+prettytable==3.16.0
+scikit_learn==1.7.2
+tqdm==4.67.1
