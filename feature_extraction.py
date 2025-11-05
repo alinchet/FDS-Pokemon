@@ -158,7 +158,7 @@ def extract_full_features(data: list[dict], progress_bar=None) -> pd.DataFrame:
 
         battle_features['p1_residual_hp_pct'] = p1_residual_hp_pct
         battle_features['p2_residual_hp_pct'] = p2_residual_hp_pct
-        battle_features['p1_players_with_low_hp_pct'] = p2_players_with_low_hp_pct
+        battle_features['p1_players_with_low_hp_pct'] = p1_players_with_low_hp_pct
         battle_features['p2_players_with_low_hp_pct'] = p2_players_with_low_hp_pct        
         battle_features['hp_pct_advantage'] = int(p1_residual_hp_pct > p2_residual_hp_pct)
             
