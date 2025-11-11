@@ -386,7 +386,8 @@ def extract_features_minimal(data: list[dict], progress_bar=None) -> pd.DataFram
 
         # We also need the ID and the target variable (if they exist)
         battle_features['battle_id'] = battle.get('battle_id')
-        battle_features['player_won'] = int(battle['player_won'])
+        if 'player_won' in battle:
+            battle_features['player_won'] = int(battle['player_won'])
 
         battle_features['p1_mean_hp_pct'] = np.mean([move['p1_pokemon_state']['hp_pct'] for move in battle['battle_timeline']])
         battle_features['p2_mean_hp_pct'] = np.mean([move['p2_pokemon_state']['hp_pct'] for move in battle['battle_timeline']])
@@ -398,6 +399,7 @@ def extract_features_minimal(data: list[dict], progress_bar=None) -> pd.DataFram
             [move['p2_pokemon_state']['hp_pct'] < LOW_hp_pct_THRESHOLD for move in battle['battle_timeline']]
         )
 
+               
         # Very Good!
         battle_features['p1_hp_pct_zero'] = sum(
             [move['p1_pokemon_state']['hp_pct'] == 0 for move in battle['battle_timeline']]
@@ -411,6 +413,19 @@ def extract_features_minimal(data: list[dict], progress_bar=None) -> pd.DataFram
         battle_features['hp_pct_advantage'] = \
             sum([move['p1_pokemon_state']['hp_pct'] > move['p2_pokemon_state']['hp_pct'] for move in battle['battle_timeline'] \
                  if move['p1_move_details'] and move['p2_move_details']])
+
+        battle_features['base_power_advantage'] = \
+            sum([move['p1_move_details']['base_power'] > move['p2_move_details']['base_power'] for move in battle['battle_timeline'] \
+                 if move['p1_move_details'] and move['p2_move_details']])
+
+        
+        # Comparison between mean of the p1 team stats and p2 leader stats
+        for c in ['base_atk', 'base_def', 'base_hp', 'base_spa', 'base_spd', 'base_spe', 'level']:
+            p1_mean_stat = np.mean([p[c] for p in battle['p1_team_details']])
+            p2_lead_stat = battle['p2_lead_details'][c]
+            #battle_features[f'p1_{c}_advantage'] = int(p1_mean_stat > p2_lead_stat)
+            battle_features[f'p1_{c}_diff'] = p1_mean_stat - p2_lead_stat
+
         
         # STATUSES
         player_status_count = {}
@@ -440,6 +455,7 @@ def extract_features_minimal(data: list[dict], progress_bar=None) -> pd.DataFram
             battle_features[f'p1_{move['p1_pokemon_state']['name']}_hp_pct'] = move['p1_pokemon_state']['hp_pct']
             battle_features[f'p2_{move['p2_pokemon_state']['name']}_hp_pct'] = move['p2_pokemon_state']['hp_pct']
             
+        '''
         p1_residual_hp_pct = p2_residual_hp_pct = 0
         p1_players_with_low_hp_pct = p2_players_with_low_hp_pct = 0
         for key, value in battle_features.items():
@@ -457,7 +473,45 @@ def extract_features_minimal(data: list[dict], progress_bar=None) -> pd.DataFram
         battle_features['p2_residual_hp_pct'] = p2_residual_hp_pct
         battle_features['p1_players_with_low_hp_pct'] = p1_players_with_low_hp_pct
         battle_features['p2_players_with_low_hp_pct'] = p2_players_with_low_hp_pct        
-        battle_features['residual_hp_pct_advantage'] = int(p1_residual_hp_pct > p2_residual_hp_pct)
+        battle_features['residual_hp_pct_adv'] = int(p1_residual_hp_pct > p2_residual_hp_pct)
+        battle_features['residual_hp_pct_diff'] = p1_residual_hp_pct - p2_residual_hp_pct
+        battle_features['residual_hp_pct_ratio'] = p1_residual_hp_pct / (p2_residual_hp_pct or 1)
+        '''
+
+        # SUM of the hp_pct of the Pokemons for each team after 30 moves and
+        # COUNT of the surviving pokemons for each team
+        p1_names_state, p2_names_state = {}, {}
+        for move in battle['battle_timeline']:
+            p1_state = move['p1_pokemon_state']
+            p2_state = move['p2_pokemon_state']
+            p1_names_state[p1_state['name']] = {}
+            p2_names_state[p2_state['name']] = {}
+            p1_names_state[p1_state['name']]['hp_pct'] = p1_state['hp_pct']
+            p2_names_state[p2_state['name']]['hp_pct'] = p2_state['hp_pct']    
+
+        t1_hp_pct_sum = sum([p1_names_state[n]['hp_pct'] for n in p1_names_state.keys()])
+        t2_hp_pct_sum = sum([p2_names_state[n]['hp_pct'] for n in p2_names_state.keys()])
+
+        # Surviving Pokemons for each team
+        t1_alive_pokemons = sum([p1_names_state[n]['hp_pct'] > 0 for n in p1_names_state.keys()])
+        t2_alive_pokemons = sum([p2_names_state[n]['hp_pct'] > 0 for n in p2_names_state.keys()])
+
+        # Pokemons with low hp_pct for each team
+        t1_low_pokemons = sum([p1_names_state[n]['hp_pct'] > LOW_hp_pct_THRESHOLD for n in p1_names_state.keys()])
+        t2_low_pokemons = sum([p2_names_state[n]['hp_pct'] > LOW_hp_pct_THRESHOLD for n in p2_names_state.keys()])
+
+        battle_features['hp_pct_sum_teams_adv'] = t2_hp_pct_sum > t1_hp_pct_sum
+        battle_features['hp_pct_sum_teams_diff'] = t2_hp_pct_sum - t1_hp_pct_sum
+        battle_features['hp_pct_sum_teams_ratio'] = t2_hp_pct_sum / (t1_hp_pct_sum or 1)
+        
+        battle_features['surviving_pokemons_adv'] = t2_alive_pokemons > t1_alive_pokemons
+        battle_features['surviving_pokemons_diff'] = t2_alive_pokemons - t1_alive_pokemons
+        battle_features['surviving_pokemons_ratio'] = t2_alive_pokemons / (t1_alive_pokemons or 1)
+
+        battle_features['low_pokemons_adv'] = t2_low_pokemons > t1_low_pokemons
+        battle_features['low_pokemons_diff'] = t2_low_pokemons - t1_low_pokemons
+        battle_features['low_pokemons_ratio'] = t2_low_pokemons / (t1_low_pokemons or 1)
+
             
         feature_list.append(battle_features)
         
